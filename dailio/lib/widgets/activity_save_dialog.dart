@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../models/activity.dart';
-import '../services/activity_service.dart';
+import '../providers/activity_repository_provider.dart';
 
 class ActivitySaveDialog extends ConsumerStatefulWidget {
   final int durationSeconds;
@@ -242,7 +242,7 @@ class _ActivitySaveDialogState extends ConsumerState<ActivitySaveDialog> {
         timestamp: DateTime.now(),
       );
 
-      await ref.read(activityServiceProvider).saveActivity(activity);
+      await ref.read(activityOperationsProvider).saveActivity(activity);
 
       if (mounted) {
         // Show success message

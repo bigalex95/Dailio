@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/timer_providers.dart';
 import '../widgets/activity_save_dialog.dart';
+import 'database_test_screen.dart';
+import 'stats_screen.dart';
 
 class TimerScreen extends ConsumerWidget {
   const TimerScreen({super.key});
@@ -21,6 +23,28 @@ class TimerScreen extends ConsumerWidget {
         elevation: 0,
         backgroundColor: Theme.of(context).colorScheme.surface,
         foregroundColor: Theme.of(context).colorScheme.onSurface,
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const StatsScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.analytics),
+            tooltip: 'Statistics',
+          ),
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DatabaseTestScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Database Tests',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),

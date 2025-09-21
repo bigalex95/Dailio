@@ -31,6 +31,43 @@ class Activity {
     required this.timestamp,
   });
 
+  // Factory constructor for creating Activity with current timestamp
+  factory Activity.create({
+    required String id,
+    required String name,
+    required String category,
+    required int durationSeconds,
+    String? notes,
+  }) {
+    return Activity(
+      id: id,
+      name: name,
+      category: category,
+      durationSeconds: durationSeconds,
+      notes: notes,
+      timestamp: DateTime.now(),
+    );
+  }
+
+  // Copy with method for immutability
+  Activity copyWith({
+    String? id,
+    String? name,
+    String? category,
+    int? durationSeconds,
+    String? notes,
+    DateTime? timestamp,
+  }) {
+    return Activity(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      notes: notes ?? this.notes,
+      timestamp: timestamp ?? this.timestamp,
+    );
+  }
+
   // Helper method to format duration as HH:MM:SS
   String get formattedDuration {
     final hours = durationSeconds ~/ 3600;
@@ -43,14 +80,61 @@ class Activity {
 
   // Helper method to get category display name
   String get categoryDisplayName {
-    switch (category) {
+    switch (category.toLowerCase()) {
       case 'useful':
         return 'Useful';
       case 'wasted':
         return 'Wasted';
+      case 'neutral':
+        return 'Neutral';
       default:
         return category;
     }
+  }
+
+  // Helper to get date only (without time)
+  DateTime get dateOnly {
+    return DateTime(timestamp.year, timestamp.month, timestamp.day);
+  }
+
+  // Helper to check if activity is from today
+  bool get isToday {
+    final now = DateTime.now();
+    return dateOnly == DateTime(now.year, now.month, now.day);
+  }
+
+  // Helper to get duration in minutes
+  double get durationInMinutes {
+    return durationSeconds / 60.0;
+  }
+
+  // Helper to get duration in hours
+  double get durationInHours {
+    return durationSeconds / 3600.0;
+  }
+
+  // Convert to JSON for debugging/export
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'durationSeconds': durationSeconds,
+      'notes': notes,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  // Create from JSON
+  factory Activity.fromJson(Map<String, dynamic> json) {
+    return Activity(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      category: json['category'] as String,
+      durationSeconds: json['durationSeconds'] as int,
+      notes: json['notes'] as String?,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+    );
   }
 
   @override
