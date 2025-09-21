@@ -6,13 +6,88 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "foreground_app_detector.h"
+#include <memory>
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  std::unique_ptr<ForegroundAppDetector> foreground_detector;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
+
+// Method channel handling for foreground app detection
+static void method_call_handler(FlMethodChannel* channel,
+                              FlMethodCall* method_call,
+                              gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  const gchar* method = fl_method_call_get_name(method_call);
+  
+  g_autoptr(FlMethodResponse) response = nullptr;
+  
+  if (strcmp(method, "getForegroundApp") == 0) {
+    if (!self->foreground_detector) {
+      self->foreground_detector = std::make_unique<ForegroundAppDetector>();
+    }
+    
+    if (self->foreground_detector->IsSupported()) {
+      std::string app_name = self->foreground_detector->GetForegroundAppName();
+      if (!app_name.empty()) {
+        g_autoptr(FlValue) result = fl_value_new_string(app_name.c_str());
+        response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+      } else {
+        response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+          "NO_APP", "Could not detect foreground app", nullptr));
+      }
+    } else {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+        "NOT_SUPPORTED", "Foreground app detection not supported", nullptr));
+    }
+  } else if (strcmp(method, "checkPermissions") == 0) {
+    // Linux doesn't require special permissions
+    g_autoptr(FlValue) result = fl_value_new_bool(true);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else if (strcmp(method, "requestPermissions") == 0) {
+    // No permissions needed on Linux
+    g_autoptr(FlValue) result = fl_value_new_bool(false);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else if (strcmp(method, "getPlatformInfo") == 0) {
+    if (!self->foreground_detector) {
+      self->foreground_detector = std::make_unique<ForegroundAppDetector>();
+    }
+    
+    g_autoptr(FlValue) info = fl_value_new_map();
+    fl_value_set_string_take(info, "platform", fl_value_new_string("Linux"));
+    fl_value_set_string_take(info, "supported", fl_value_new_bool(self->foreground_detector->IsSupported()));
+    fl_value_set_string_take(info, "hasPermissions", fl_value_new_bool(true));
+    fl_value_set_string_take(info, "requiresPermissions", fl_value_new_bool(false));
+    fl_value_set_string_take(info, "permissionsLocation", fl_value_new_string("None required"));
+    fl_value_set_string_take(info, "detector", fl_value_new_string(self->foreground_detector->GetDetectorInfo().c_str()));
+    
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(info));
+  } else if (strcmp(method, "test") == 0) {
+    g_autoptr(FlValue) result = fl_value_new_string("success");
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else {
+    response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
+  }
+  
+  fl_method_call_respond(method_call, response, nullptr);
+}
+
+static void setup_method_channel(FlView* view, MyApplication* self) {
+  FlEngine* engine = fl_view_get_engine(view);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_autoptr(FlMethodChannel) channel = fl_method_channel_new(
+    fl_engine_get_binary_messenger(engine),
+    "dailio/foreground_app",
+    FL_METHOD_CODEC(codec)
+  );
+  
+  fl_method_channel_set_method_call_handler(
+    channel, method_call_handler, self, nullptr);
+}
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
@@ -58,6 +133,9 @@ static void my_application_activate(GApplication* application) {
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+  
+  // Setup method channel for foreground app detection
+  setup_method_channel(view, self);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

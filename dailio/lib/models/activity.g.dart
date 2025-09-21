@@ -23,13 +23,16 @@ class ActivityAdapter extends TypeAdapter<Activity> {
       durationSeconds: fields[3] as int,
       notes: fields[4] as String?,
       timestamp: fields[5] as DateTime,
+      isTracked: fields[6] as bool,
+      startTime: fields[7] as DateTime?,
+      endTime: fields[8] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Activity obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +44,13 @@ class ActivityAdapter extends TypeAdapter<Activity> {
       ..writeByte(4)
       ..write(obj.notes)
       ..writeByte(5)
-      ..write(obj.timestamp);
+      ..write(obj.timestamp)
+      ..writeByte(6)
+      ..write(obj.isTracked)
+      ..writeByte(7)
+      ..write(obj.startTime)
+      ..writeByte(8)
+      ..write(obj.endTime);
   }
 
   @override

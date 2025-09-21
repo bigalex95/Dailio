@@ -3,6 +3,8 @@
 
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <flutter/method_channel.h>
+#include <flutter/encodable_value.h>
 
 #include <memory>
 
@@ -28,6 +30,19 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+  
+  // Method channel for foreground app detection
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> method_channel_;
+  
+  // Method channel setup and handlers
+  void SetupMethodChannel();
+  void HandleMethodCall(
+      const flutter::MethodCall<flutter::EncodableValue>& method_call,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void GetForegroundAppName(
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  void GetPlatformInfo(
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

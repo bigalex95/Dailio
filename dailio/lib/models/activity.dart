@@ -22,6 +22,15 @@ class Activity {
   @HiveField(5)
   final DateTime timestamp;
 
+  @HiveField(6)
+  final bool isTracked;
+
+  @HiveField(7)
+  final DateTime? startTime;
+
+  @HiveField(8)
+  final DateTime? endTime;
+
   Activity({
     required this.id,
     required this.name,
@@ -29,6 +38,9 @@ class Activity {
     required this.durationSeconds,
     this.notes,
     required this.timestamp,
+    this.isTracked = false,
+    this.startTime,
+    this.endTime,
   });
 
   // Factory constructor for creating Activity with current timestamp
@@ -38,6 +50,9 @@ class Activity {
     required String category,
     required int durationSeconds,
     String? notes,
+    bool isTracked = false,
+    DateTime? startTime,
+    DateTime? endTime,
   }) {
     return Activity(
       id: id,
@@ -46,6 +61,32 @@ class Activity {
       durationSeconds: durationSeconds,
       notes: notes,
       timestamp: DateTime.now(),
+      isTracked: isTracked,
+      startTime: startTime,
+      endTime: endTime,
+    );
+  }
+
+  // Factory constructor for auto-tracked activities
+  factory Activity.tracked({
+    required String id,
+    required String name,
+    required DateTime startTime,
+    required DateTime endTime,
+    String? category,
+    String? notes,
+  }) {
+    final duration = endTime.difference(startTime);
+    return Activity(
+      id: id,
+      name: name,
+      category: category ?? 'Auto-tracked',
+      durationSeconds: duration.inSeconds,
+      notes: notes,
+      timestamp: startTime,
+      isTracked: true,
+      startTime: startTime,
+      endTime: endTime,
     );
   }
 
@@ -57,6 +98,9 @@ class Activity {
     int? durationSeconds,
     String? notes,
     DateTime? timestamp,
+    bool? isTracked,
+    DateTime? startTime,
+    DateTime? endTime,
   }) {
     return Activity(
       id: id ?? this.id,
@@ -65,7 +109,18 @@ class Activity {
       durationSeconds: durationSeconds ?? this.durationSeconds,
       notes: notes ?? this.notes,
       timestamp: timestamp ?? this.timestamp,
+      isTracked: isTracked ?? this.isTracked,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
     );
+  }
+
+  // Get computed duration from start/end times if available
+  Duration get duration {
+    if (startTime != null && endTime != null) {
+      return endTime!.difference(startTime!);
+    }
+    return Duration(seconds: durationSeconds);
   }
 
   // Helper method to format duration as HH:MM:SS
@@ -122,6 +177,9 @@ class Activity {
       'durationSeconds': durationSeconds,
       'notes': notes,
       'timestamp': timestamp.toIso8601String(),
+      'isTracked': isTracked,
+      'startTime': startTime?.toIso8601String(),
+      'endTime': endTime?.toIso8601String(),
     };
   }
 
@@ -134,6 +192,13 @@ class Activity {
       durationSeconds: json['durationSeconds'] as int,
       notes: json['notes'] as String?,
       timestamp: DateTime.parse(json['timestamp'] as String),
+      isTracked: json['isTracked'] as bool? ?? false,
+      startTime: json['startTime'] != null 
+          ? DateTime.parse(json['startTime'] as String) 
+          : null,
+      endTime: json['endTime'] != null 
+          ? DateTime.parse(json['endTime'] as String) 
+          : null,
     );
   }
 

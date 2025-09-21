@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/timer_providers.dart';
 import '../widgets/activity_save_dialog.dart';
+import '../widgets/auto_tracking_status.dart';
 import 'database_test_screen.dart';
 import 'stats_screen.dart';
+import 'settings_screen.dart';
 
 class TimerScreen extends ConsumerWidget {
   const TimerScreen({super.key});
@@ -38,6 +40,16 @@ class TimerScreen extends ConsumerWidget {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
+                builder: (context) => const SettingsScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+          ),
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
                 builder: (context) => const DatabaseTestScreen(),
               ),
             ),
@@ -46,11 +58,19 @@ class TimerScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: Column(
+        children: [
+          // Auto-tracking status
+          const AutoTrackingStatusWidget(),
+          const AutoTrackingErrorWidget(),
+          
+          // Main content
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
             // Timer Display Card
             Card(
               elevation: 4,
@@ -164,8 +184,11 @@ class TimerScreen extends ConsumerWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-          ],
-        ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
