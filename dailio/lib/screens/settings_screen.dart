@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/auto_tracker_provider.dart';
-import '../services/foreground_app_service.dart';
+import '../providers/settings_provider.dart';
+import '../services/export_service.dart';
+import '../repositories/activity_repository.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -12,409 +12,513 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  Map<String, dynamic>? _platformInfo;
-  bool _isLoadingPlatformInfo = false;
+  late ExportService _exportService;
+  bool _isExporting = false;
 
   @override
   void initState() {
     super.initState();
-    _loadPlatformInfo();
-  }
-
-  Future<void> _loadPlatformInfo() async {
-    setState(() {
-      _isLoadingPlatformInfo = true;
-    });
-
-    try {
-      final service = ForegroundAppService();
-      final info = await service.getPlatformInfo();
-      setState(() {
-        _platformInfo = info;
-      });
-    } catch (e) {
-      debugPrint('Failed to load platform info: $e');
-    } finally {
-      setState(() {
-        _isLoadingPlatformInfo = false;
-      });
-    }
-  }
-
-  Future<void> _requestPermissions() async {
-    try {
-      final service = ForegroundAppService();
-      final shouldOpenSettings = await service.requestPermissions();
-      
-      if (shouldOpenSettings && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Please grant accessibility permissions in System Preferences > Security & Privacy > Privacy > Accessibility',
-            ),
-            duration: Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to request permissions: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
+    _exportService = ExportService(ActivityRepository());
   }
 
   @override
   Widget build(BuildContext context) {
-    final autoTrackerState = ref.watch(autoTrackerProvider);
-    final autoTrackerNotifier = ref.read(autoTrackerProvider.notifier);
+    final settings = ref.watch(settingsProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        elevation: 0,
       ),
-      body: ListView(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Auto-Tracking Section
+            _buildSectionCard(
+              title: 'Auto-Tracking',
+              icon: Icons.track_changes,
+              children: [
+                SwitchListTile(
+                  title: const Text('Enable Auto-Tracking'),
+                  subtitle: const Text('Automatically track foreground applications'),
+                  value: settings.autoTrackingEnabled,
+                  onChanged: (value) => settingsNotifier.toggleAutoTracking(value),
+                ),
+                if (settings.autoTrackingEnabled) ...[
+                  const Divider(height: 1),
+                  ListTile(
+                    title: const Text('Tracking Interval'),
+                    subtitle: Text('${settings.autoTrackingInterval} seconds'),
+                    trailing: SizedBox(
+                      width: 100,
+                      child: DropdownButton<int>(
+                        value: settings.autoTrackingInterval,
+                        isExpanded: true,
+                        items: [1, 3, 5, 10, 15, 30, 60].map((seconds) {
+                          return DropdownMenuItem<int>(
+                            value: seconds,
+                            child: Text('${seconds}s'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            settingsNotifier.updateAutoTrackingInterval(value);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // General Settings Section
+            _buildSectionCard(
+              title: 'General',
+              icon: Icons.settings,
+              children: [
+                SwitchListTile(
+                  title: const Text('Dark Mode'),
+                  subtitle: const Text('Use dark theme'),
+                  value: settings.darkMode,
+                  onChanged: (value) => settingsNotifier.toggleDarkMode(value),
+                ),
+                const Divider(height: 1),
+                SwitchListTile(
+                  title: const Text('Notifications'),
+                  subtitle: const Text('Show activity notifications'),
+                  value: settings.showNotifications,
+                  onChanged: (value) => settingsNotifier.toggleNotifications(value),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('Default Category'),
+                  subtitle: Text(settings.defaultCategory),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showCategoryPicker(context, settingsNotifier, settings.defaultCategory),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Export Section
+            _buildSectionCard(
+              title: 'Data Export',
+              icon: Icons.file_download,
+              children: [
+                SwitchListTile(
+                  title: const Text('Include Notes in Export'),
+                  subtitle: const Text('Export activity notes and descriptions'),
+                  value: settings.exportIncludeNotes,
+                  onChanged: (value) => settingsNotifier.toggleExportIncludeNotes(value),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  title: const Text('Export Format'),
+                  subtitle: Text(settings.exportFormat),
+                  trailing: SizedBox(
+                    width: 80,
+                    child: DropdownButton<String>(
+                      value: settings.exportFormat,
+                      isExpanded: true,
+                      items: settingsNotifier.getAvailableExportFormats().map((format) {
+                        return DropdownMenuItem<String>(
+                          value: format,
+                          child: Text(format),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          settingsNotifier.updateExportFormat(value);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.download),
+                  title: const Text('Export All Activities'),
+                  subtitle: const Text('Download all activities as CSV'),
+                  trailing: _isExporting 
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.chevron_right),
+                  onTap: _isExporting ? null : () => _exportAllActivities(),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.date_range),
+                  title: const Text('Export by Date Range'),
+                  subtitle: const Text('Choose specific dates to export'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showDateRangeExport(context),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Statistics Section
+            _buildSectionCard(
+              title: 'Statistics',
+              icon: Icons.analytics,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: const Text('Export Statistics'),
+                  subtitle: const Text('View data summary and stats'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showExportStatistics(context),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
+
+            // Advanced Section
+            _buildSectionCard(
+              title: 'Advanced',
+              icon: Icons.build,
+              children: [
+                ListTile(
+                  leading: Icon(Icons.refresh, color: Theme.of(context).colorScheme.primary),
+                  title: const Text('Reset Settings'),
+                  subtitle: const Text('Restore default settings'),
+                  onTap: () => _showResetConfirmation(context, settingsNotifier),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Auto-tracking section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.auto_mode,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Auto-Tracking',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Icon(icon, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-                  const SizedBox(height: 16),
-                  
-                  // Auto-tracking toggle
-                  SwitchListTile(
-                    title: const Text('Enable Auto-Tracking'),
-                    subtitle: Text(
-                      autoTrackerState.isEnabled
-                          ? 'Automatically track foreground applications'
-                          : 'Manual activity tracking only',
-                    ),
-                    value: autoTrackerState.isEnabled,
-                    onChanged: (_) => autoTrackerNotifier.toggleTracking(),
-                  ),
-                  
-                  // Current status
-                  if (autoTrackerState.isEnabled) ...[
-                    const Divider(),
-                    ListTile(
-                      leading: Icon(
-                        autoTrackerState.isTracking
-                            ? Icons.play_circle_filled
-                            : Icons.pause_circle_filled,
-                        color: autoTrackerState.isTracking
-                            ? Colors.green
-                            : Colors.orange,
-                      ),
-                      title: Text(
-                        autoTrackerState.isTracking
-                            ? 'Currently Tracking'
-                            : 'Tracking Paused',
-                      ),
-                      subtitle: autoTrackerState.currentAppName != null
-                          ? Text('Current app: ${autoTrackerState.currentAppName}')
-                          : const Text('No app detected'),
-                    ),
-                  ],
-                  
-                  // Error display
-                  if (autoTrackerState.errorMessage != null) ...[
-                    const Divider(),
-                    ListTile(
-                      leading: const Icon(Icons.error, color: Colors.red),
-                      title: const Text('Error'),
-                      subtitle: Text(autoTrackerState.errorMessage!),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.refresh),
-                        onPressed: () => autoTrackerNotifier.startTracking(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          
-          const SizedBox(height: 16),
-          
-          // Platform information section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        _getPlatformIcon(),
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Platform Information',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  if (_isLoadingPlatformInfo)
-                    const Center(child: CircularProgressIndicator())
-                  else if (_platformInfo != null) ...[
-                    _InfoTile(
-                      title: 'Platform',
-                      value: _platformInfo!['platform'] ?? 'Unknown',
-                    ),
-                    _InfoTile(
-                      title: 'Supported',
-                      value: _platformInfo!['supported'] == true ? 'Yes' : 'No',
-                    ),
-                    if (_platformInfo!['version'] != null)
-                      _InfoTile(
-                        title: 'Version',
-                        value: _platformInfo!['version'],
-                      ),
-                    
-                    // Permissions section
-                    if (_platformInfo!['requiresPermissions'] == true) ...[
-                      const Divider(),
-                      ListTile(
-                        leading: Icon(
-                          _platformInfo!['hasPermissions'] == true
-                              ? Icons.check_circle
-                              : Icons.warning,
-                          color: _platformInfo!['hasPermissions'] == true
-                              ? Colors.green
-                              : Colors.orange,
-                        ),
-                        title: Text(
-                          _platformInfo!['hasPermissions'] == true
-                              ? 'Permissions Granted'
-                              : 'Permissions Required',
-                        ),
-                        subtitle: Text(_platformInfo!['permissionsLocation'] ?? ''),
-                        trailing: _platformInfo!['hasPermissions'] != true
-                            ? ElevatedButton(
-                                onPressed: _requestPermissions,
-                                child: const Text('Grant'),
-                              )
-                            : null,
-                      ),
-                    ],
-                  ] else
-                    const Text('Failed to load platform information'),
-                ],
-              ),
-            ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  void _showCategoryPicker(BuildContext context, SettingsNotifier notifier, String currentCategory) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Default Category'),
+        content: SizedBox(
+          width: double.minPositive,
+          child: ListView(
+            shrinkWrap: true,
+            children: notifier.getAvailableCategories().map((category) {
+              return RadioListTile<String>(
+                title: Text(category),
+                value: category,
+                groupValue: currentCategory,
+                onChanged: (value) {
+                  if (value != null) {
+                    notifier.updateDefaultCategory(value);
+                    Navigator.of(context).pop();
+                  }
+                },
+              );
+            }).toList(),
           ),
-          
-          const SizedBox(height: 16),
-          
-          // Test section
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.bug_report,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Testing',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  ListTile(
-                    title: const Text('Test Foreground App Detection'),
-                    subtitle: const Text('Check if the native integration is working'),
-                    trailing: ElevatedButton(
-                      onPressed: _testForegroundAppDetection,
-                      child: const Text('Test'),
-                    ),
-                  ),
-                  
-                  ListTile(
-                    title: const Text('View Tracking Statistics'),
-                    subtitle: const Text('See auto-tracking performance'),
-                    trailing: ElevatedButton(
-                      onPressed: _showTrackingStats,
-                      child: const Text('View'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _testForegroundAppDetection() async {
+  Future<void> _exportAllActivities() async {
+    setState(() => _isExporting = true);
+    
     try {
-      final service = ForegroundAppService();
-      final appName = await service.getForegroundAppName();
+      final filePath = await _exportService.exportActivitiesToCSV();
       
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Test Result'),
-            content: Text(
-              appName != null
-                  ? 'Current foreground app: $appName'
-                  : 'No foreground app detected',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+      if (filePath != null && mounted) {
+        _showExportSuccessDialog(filePath);
+      } else if (mounted) {
+        _showExportErrorDialog('Failed to export activities');
       }
     } catch (e) {
       if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Test Failed'),
-            content: Text('Error: $e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+        _showExportErrorDialog('Export error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
       }
     }
   }
 
-  Future<void> _showTrackingStats() async {
-    try {
-      final stats = await ref.read(autoTrackerProvider.notifier).getTrackingStats();
-      
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Tracking Statistics'),
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (stats.containsKey('error'))
-                    Text('Error: ${stats['error']}')
-                  else ...[
-                    Text('Total Activities: ${stats['totalActivities'] ?? 0}'),
-                    const SizedBox(height: 8),
-                    Text('Total Duration: ${_formatDuration(stats['totalDuration'] as Duration? ?? Duration.zero)}'),
-                    const SizedBox(height: 8),
-                    if (stats['mostUsedApp'] != null)
-                      Text('Most Used App: ${stats['mostUsedApp']}'),
-                    const SizedBox(height: 16),
-                    const Text('App Usage:', style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    if (stats['appCounts'] != null)
-                      ...(stats['appCounts'] as Map<String, int>).entries.map(
-                        (entry) => Text('${entry.key}: ${entry.value} sessions'),
-                      ),
-                  ],
-                ],
+  void _showDateRangeExport(BuildContext context) {
+    DateTime? startDate;
+    DateTime? endDate;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Export Date Range'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Start Date'),
+                subtitle: Text(startDate?.toString().split(' ')[0] ?? 'Select start date'),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: startDate ?? DateTime.now().subtract(const Duration(days: 30)),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => startDate = picked);
+                  }
+                },
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
+              ListTile(
+                title: const Text('End Date'),
+                subtitle: Text(endDate?.toString().split(' ')[0] ?? 'Select end date'),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: endDate ?? DateTime.now(),
+                    firstDate: startDate ?? DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => endDate = picked);
+                  }
+                },
               ),
             ],
           ),
-        );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: startDate != null && endDate != null
+                ? () async {
+                    Navigator.of(context).pop();
+                    await _exportDateRange(startDate!, endDate!);
+                  }
+                : null,
+              child: const Text('Export'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportDateRange(DateTime startDate, DateTime endDate) async {
+    setState(() => _isExporting = true);
+    
+    try {
+      final filePath = await _exportService.exportActivitiesByDateRange(startDate, endDate);
+      
+      if (filePath != null && mounted) {
+        _showExportSuccessDialog(filePath);
+      } else if (mounted) {
+        _showExportErrorDialog('Failed to export activities for selected date range');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load stats: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        _showExportErrorDialog('Export error: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
       }
     }
+  }
+
+  Future<void> _showExportStatistics(BuildContext context) async {
+    final stats = await _exportService.getExportStatistics();
+    
+    if (!mounted) return;
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export Statistics'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: stats.containsKey('error')
+            ? Text('Error: ${stats['error']}')
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatRow('Total Activities', '${stats['totalActivities']}'),
+                  _buildStatRow('Manual Activities', '${stats['manualActivities']}'),
+                  _buildStatRow('Auto-tracked Activities', '${stats['autoTrackedActivities']}'),
+                  const SizedBox(height: 8),
+                  const Text('Categories:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  ...(stats['categories'] as Map<String, int>).entries.map(
+                    (entry) => _buildStatRow('  ${entry.key}', '${entry.value}'),
+                  ),
+                  const SizedBox(height: 8),
+                  if (stats['totalDuration'] != null)
+                    _buildStatRow('Total Duration', _formatDuration(stats['totalDuration'] as Duration)),
+                  if (stats['earliestActivity'] != null)
+                    _buildStatRow('Earliest Activity', _formatDate(stats['earliestActivity'] as DateTime)),
+                  if (stats['latestActivity'] != null)
+                    _buildStatRow('Latest Activity', _formatDate(stats['latestActivity'] as DateTime)),
+                ],
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
   }
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
+    final minutes = duration.inMinutes % 60;
     return '${hours}h ${minutes}m';
   }
 
-  IconData _getPlatformIcon() {
-    if (Platform.isMacOS) return Icons.laptop_mac;
-    if (Platform.isWindows) return Icons.laptop_windows;
-    if (Platform.isAndroid) return Icons.phone_android;
-    if (Platform.isIOS) return Icons.phone_iphone;
-    if (Platform.isLinux) return Icons.computer;
-    return Icons.device_unknown;
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
   }
-}
 
-class _InfoTile extends StatelessWidget {
-  final String title;
-  final String value;
-
-  const _InfoTile({
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w500),
+  void _showExportSuccessDialog(String filePath) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export Successful'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Activities have been exported successfully!'),
+            const SizedBox(height: 8),
+            const Text('File location:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            SelectableText(
+              filePath,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
           ),
-          Text(value),
+        ],
+      ),
+    );
+  }
+
+  void _showExportErrorDialog(String error) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Export Failed'),
+        content: Text(error),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showResetConfirmation(BuildContext context, SettingsNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Settings'),
+        content: const Text('Are you sure you want to reset all settings to their default values? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              notifier.resetToDefaults();
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Settings reset to defaults')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: const Text('Reset'),
+          ),
         ],
       ),
     );
