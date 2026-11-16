@@ -14,12 +14,12 @@ The auto-tracker module includes:
 
 | Platform | Support | Permissions Required | Native API | Status |
 |----------|---------|---------------------|------------|---------|
-| macOS    | ✅ Full | Accessibility Access | NSWorkspace | Production Ready |
-| Windows  | ✅ Full | None | Win32 API | Production Ready |
-| Android  | ✅ Full | Usage Access | UsageStatsManager | Production Ready |
-| Linux    | ✅ Full | None | X11/Wayland | Production Ready |
-| iOS      | ❌ Impossible | N/A | N/A (Sandboxed) | Not Possible |
-| Web      | ❌ Not supported | N/A | N/A | Not Applicable |
+| macOS    | Full | Accessibility Access | NSWorkspace | Implemented |
+| Windows  | Full | None | Win32 API | Implemented |
+| Android  | Full | Usage Access | UsageStatsManager | Implemented |
+| Linux    | Full | None | X11/Wayland | Implemented |
+| iOS      | Impossible | N/A | N/A (Sandboxed) | Not Possible |
+| Web      | Not supported | N/A | N/A | Not Applicable |
 
 ## macOS Setup
 
