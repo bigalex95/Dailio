@@ -1,18 +1,18 @@
-# Manual Activity Timer Module - Setup Instructions
+# Manual Activity Timer Module
 
 ## Overview
-A complete manual activity timer module for the Dailio productivity tracker app, built with Flutter, Riverpod, and Hive.
+A manual activity timer module for the Dailio productivity tracker app, built with Flutter, Riverpod, and Hive.
 
 ## Features Implemented
-- ✅ Start/Stop timer with button
-- ✅ Real-time elapsed time display in HH:MM:SS format  
-- ✅ Save dialog on timer stop with:
+- Start/Stop timer with button
+- Real-time elapsed time display in HH:MM:SS format  
+- Save dialog on timer stop with:
   - Activity name input (required)
   - Category selection: "Useful" or "Wasted" 
   - Optional notes (multiline)
-- ✅ Local storage with Hive database
-- ✅ Riverpod state management
-- ✅ Material 3 responsive UI
+- Local storage with Hive database
+- Riverpod state management
+- Material 3 responsive UI
 
 ## File Structure Created
 
